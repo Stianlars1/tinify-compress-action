@@ -1,0 +1,25 @@
+# Verifies that the committed dist/ bundle matches src/. GitHub runs the
+# checked-in dist/index.js, so a stale bundle would silently ship old code.
+name: Check dist
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check-dist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Compare committed dist/ with the freshly built one
+        run: git diff --exit-code dist/

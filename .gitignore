@@ -1,0 +1,7 @@
+# dist/ is COMMITTED on purpose: GitHub Actions runs the checked-in bundle.
+# The negations below also override any global gitignore that excludes dist.
+!dist/
+!dist/**
+node_modules/
+*.tsbuildinfo
+.DS_Store

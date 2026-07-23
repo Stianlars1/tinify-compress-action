@@ -1,0 +1,70 @@
+name: "Tinify.dev Compress"
+description: >-
+  Compress PNG, JPEG, WebP, and AVIF images with the Tinify.dev API.
+  Honest savings (files are only rewritten when they actually get smaller),
+  job summary table, and an optional sticky PR comment.
+author: "Stian Larsen"
+
+branding:
+  icon: image
+  color: green
+
+inputs:
+  api_key:
+    description: >-
+      Tinify.dev API key (tnf_live_* or tnf_test_*). Create one at
+      https://tinify.dev/developers and store it as a repository secret.
+    required: true
+  patterns:
+    description: >-
+      Glob pattern(s) for images to process, newline- or comma-separated.
+      Brace groups like *.{png,jpg} are supported.
+    required: false
+    default: "**/*.{png,jpg,jpeg,webp,avif}"
+  mode:
+    description: >-
+      "check" only reports what would change; "write" replaces files in the
+      workspace when the compressed result is smaller. Pair "write" with a
+      commit action such as stefanzweifel/git-auto-commit-action.
+    required: false
+    default: "check"
+  quality_mode:
+    description: 'Optional Tinify.dev quality mode: balanced, best_quality, or lossless.'
+    required: false
+    default: ""
+  comment:
+    description: Post/update a sticky PR comment with the results table.
+    required: false
+    default: "false"
+  github_token:
+    description: Token used for the PR comment. Defaults to the workflow token.
+    required: false
+    default: ${{ github.token }}
+  min_savings_bytes:
+    description: >-
+      Ignore savings below this many bytes per file; such files are reported
+      but never rewritten.
+    required: false
+    default: "128"
+  fail_on_error:
+    description: Fail the step when any file fails to compress.
+    required: false
+    default: "true"
+  base_url:
+    description: "Advanced: override the API origin (defaults to https://api.tinify.dev)."
+    required: false
+    default: ""
+
+outputs:
+  files_processed:
+    description: Number of files matched and processed (including skips and failures).
+  files_changed:
+    description: Number of files written (mode=write) or that would be written (mode=check).
+  total_saved_bytes:
+    description: Total bytes saved across changed files.
+  summary_json:
+    description: JSON array with the per-file results (file, before, after, saved, action).
+
+runs:
+  using: node20
+  main: dist/index.js
