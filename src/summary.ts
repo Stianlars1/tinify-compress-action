@@ -51,10 +51,10 @@ export function buildMarkdownSummary(results: FileResult[], mode: Mode): string 
   lines.push("| --- | ---: | ---: | ---: | --- |");
   for (const result of results) {
     const before = formatBytes(result.originalBytes);
-    const after = result.resultBytes === null ? "—" : formatBytes(result.resultBytes);
+    const after = result.resultBytes === null ? " - " : formatBytes(result.resultBytes);
     const delta =
       result.resultBytes === null || result.originalBytes === 0
-        ? "—"
+        ? " - "
         : `${((-result.savedBytes / result.originalBytes) * 100).toFixed(1)}%`;
     const action =
       result.action === "failed" && result.error !== undefined
