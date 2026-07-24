@@ -1,8 +1,5 @@
 name: "Tinify.dev Compress"
-description: >-
-  Compress PNG, JPEG, WebP, and AVIF images with the Tinify.dev API.
-  Honest savings (files are only rewritten when they actually get smaller),
-  job summary table, and an optional sticky PR comment.
+description: "Compress PNG, JPEG, WebP and AVIF images in CI via the Tinify.dev API. Only rewrites files that actually get smaller."
 author: "Stian Larsen"
 
 branding:
