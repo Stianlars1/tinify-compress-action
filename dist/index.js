@@ -63685,7 +63685,7 @@ exports.isSupportedImage = isSupportedImage;
 exports.processFiles = processFiles;
 const promises_1 = __nccwpck_require__(1455);
 const node_path_1 = __importDefault(__nccwpck_require__(6760));
-const client_1 = __nccwpck_require__(2379);
+const client_1 = __nccwpck_require__(8809);
 exports.SUPPORTED_EXTENSIONS = [
     ".png",
     ".jpg",
@@ -63965,7 +63965,7 @@ const node_path_1 = __importDefault(__nccwpck_require__(6760));
 const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
 const glob = __importStar(__nccwpck_require__(7206));
-const client_1 = __nccwpck_require__(2379);
+const client_1 = __nccwpck_require__(8809);
 const compress_1 = __nccwpck_require__(3723);
 const inputs_1 = __nccwpck_require__(8422);
 const summary_1 = __nccwpck_require__(8855);
@@ -66240,7 +66240,7 @@ module.exports = parseParams
 
 /***/ }),
 
-/***/ 2379:
+/***/ 8809:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
