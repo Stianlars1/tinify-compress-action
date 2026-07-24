@@ -63693,6 +63693,12 @@ exports.SUPPORTED_EXTENSIONS = [
     ".webp",
     ".avif",
 ];
+/**
+ * Per-file wall-clock cap on the compress + download round-trip. Passed as an
+ * AbortSignal so a stalled result download (or slow API) fails that file
+ * instead of hanging the whole job until GitHub's 6-hour cap.
+ */
+const PER_FILE_TIMEOUT_MS = 120_000;
 function isSupportedImage(file) {
     return exports.SUPPORTED_EXTENSIONS.includes(node_path_1.default.extname(file).toLowerCase());
 }
@@ -63734,11 +63740,13 @@ async function processOne(file, options, client, logger) {
             };
         }
         const bytes = new Uint8Array(await (0, promises_1.readFile)(file));
+        const signal = AbortSignal.timeout(PER_FILE_TIMEOUT_MS);
         const result = await client.compress(bytes, {
             ...(options.qualityMode !== undefined
                 ? { quality_mode: options.qualityMode }
                 : {}),
             filename: node_path_1.default.basename(file),
+            signal,
         });
         const data = result.data;
         const resultBytes = data.result_bytes;
@@ -63766,9 +63774,13 @@ async function processOne(file, options, client, logger) {
             };
         }
         if (options.mode === "write") {
-            const blob = await client.download(result);
+            const blob = await client.download(result, { signal });
             const output = new Uint8Array(await blob.arrayBuffer());
-            await (0, promises_1.writeFile)(file, output);
+            // Write to a temp file then rename so a crash/timeout mid-write can't
+            // corrupt the source image in place.
+            const tmp = `${file}.tinify.tmp`;
+            await (0, promises_1.writeFile)(tmp, output);
+            await (0, promises_1.rename)(tmp, file);
             logger.info(`${file}: ${originalBytes} -> ${resultBytes} bytes (saved ${savedBytes}).`);
             return {
                 file,
@@ -64063,12 +64075,20 @@ async function run() {
         }
         else {
             const octokit = github.getOctokit(inputs.githubToken);
-            const outcome = await (0, report_1.upsertStickyComment)(octokit.rest.issues, {
-                owner: github.context.repo.owner,
-                repo: github.context.repo.repo,
-                issueNumber: pullRequest.number,
-            }, markdown);
-            core.info(`Sticky PR comment ${outcome}.`);
+            try {
+                const outcome = await (0, report_1.upsertStickyComment)(octokit.rest.issues, {
+                    owner: github.context.repo.owner,
+                    repo: github.context.repo.repo,
+                    issueNumber: pullRequest.number,
+                }, markdown);
+                core.info(`Sticky PR comment ${outcome}.`);
+            }
+            catch (error) {
+                // A comment failure (fork PR with a read-only token, missing
+                // pull-requests: write permission, etc.) must not fail an otherwise
+                // successful compression run.
+                core.warning(`Could not post the PR comment (compression still succeeded): ${error instanceof Error ? error.message : String(error)}`);
+            }
         }
     }
     core.info(`${totals.processed} processed, ${totals.changed} ` +
@@ -64104,24 +64124,44 @@ exports.COMMENT_MARKER = "<!-- tinify-compress-action -->";
 function buildCommentBody(markdownSummary) {
     return `${exports.COMMENT_MARKER}\n${markdownSummary}`;
 }
+/** GitHub caps an issue-comment body at 65,536 chars; stay safely under. */
+const MAX_COMMENT_BODY = 65_000;
+function capCommentBody(body) {
+    if (body.length <= MAX_COMMENT_BODY)
+        return body;
+    const notice = "\n\n_(report truncated to fit GitHub's comment size limit)_";
+    return `${body.slice(0, MAX_COMMENT_BODY - notice.length)}${notice}`;
+}
 /**
  * Creates or updates the single sticky PR comment identified by
- * {@link COMMENT_MARKER}.
+ * {@link COMMENT_MARKER}. Scans every page of comments so the marker is found
+ * on busy PRs (finding only the first 100 would spawn a duplicate each run).
  */
 async function upsertStickyComment(issues, target, markdownSummary) {
-    const body = buildCommentBody(markdownSummary);
-    const { data: comments } = await issues.listComments({
-        owner: target.owner,
-        repo: target.repo,
-        issue_number: target.issueNumber,
-        per_page: 100,
-    });
-    const existing = comments.find((comment) => comment.body?.includes(exports.COMMENT_MARKER));
-    if (existing !== undefined) {
+    const body = capCommentBody(buildCommentBody(markdownSummary));
+    const perPage = 100;
+    let existingId;
+    for (let page = 1;; page += 1) {
+        const { data: comments } = await issues.listComments({
+            owner: target.owner,
+            repo: target.repo,
+            issue_number: target.issueNumber,
+            per_page: perPage,
+            page,
+        });
+        const found = comments.find((comment) => comment.body?.includes(exports.COMMENT_MARKER));
+        if (found !== undefined) {
+            existingId = found.id;
+            break;
+        }
+        if (comments.length < perPage)
+            break; // last page reached
+    }
+    if (existingId !== undefined) {
         await issues.updateComment({
             owner: target.owner,
             repo: target.repo,
-            comment_id: existing.id,
+            comment_id: existingId,
             body,
         });
         return "updated";

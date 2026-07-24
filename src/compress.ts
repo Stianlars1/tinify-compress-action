@@ -1,4 +1,4 @@
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   MAX_FILE_BYTES,
@@ -16,6 +16,13 @@ export const SUPPORTED_EXTENSIONS = [
   ".webp",
   ".avif",
 ] as const;
+
+/**
+ * Per-file wall-clock cap on the compress + download round-trip. Passed as an
+ * AbortSignal so a stalled result download (or slow API) fails that file
+ * instead of hanging the whole job until GitHub's 6-hour cap.
+ */
+const PER_FILE_TIMEOUT_MS = 120_000;
 
 export type FileAction =
   | "written"
@@ -40,9 +47,12 @@ export interface FileResult {
 export interface CompressClient {
   compress(
     input: Uint8Array,
-    options?: CompressOptions & { filename?: string },
+    options?: CompressOptions & { filename?: string; signal?: AbortSignal },
   ): Promise<TinifyResponse<ImageResultData>>;
-  download(resultOrUrl: TinifyResponse<ImageResultData>): Promise<Blob>;
+  download(
+    resultOrUrl: TinifyResponse<ImageResultData>,
+    options?: { signal?: AbortSignal },
+  ): Promise<Blob>;
 }
 
 export interface Logger {
@@ -118,11 +128,13 @@ async function processOne(
     }
 
     const bytes = new Uint8Array(await readFile(file));
+    const signal = AbortSignal.timeout(PER_FILE_TIMEOUT_MS);
     const result = await client.compress(bytes, {
       ...(options.qualityMode !== undefined
         ? { quality_mode: options.qualityMode }
         : {}),
       filename: path.basename(file),
+      signal,
     });
     const data = result.data;
     const resultBytes = data.result_bytes;
@@ -155,9 +167,13 @@ async function processOne(
     }
 
     if (options.mode === "write") {
-      const blob = await client.download(result);
+      const blob = await client.download(result, { signal });
       const output = new Uint8Array(await blob.arrayBuffer());
-      await writeFile(file, output);
+      // Write to a temp file then rename so a crash/timeout mid-write can't
+      // corrupt the source image in place.
+      const tmp = `${file}.tinify.tmp`;
+      await writeFile(tmp, output);
+      await rename(tmp, file);
       logger.info(`${file}: ${originalBytes} -> ${resultBytes} bytes (saved ${savedBytes}).`);
       return {
         file,

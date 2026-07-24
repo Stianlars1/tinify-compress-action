@@ -123,16 +123,27 @@ export async function run(): Promise<void> {
       core.warning("comment: true but github_token is empty; skipping comment.");
     } else {
       const octokit = github.getOctokit(inputs.githubToken);
-      const outcome = await upsertStickyComment(
-        octokit.rest.issues,
-        {
-          owner: github.context.repo.owner,
-          repo: github.context.repo.repo,
-          issueNumber: pullRequest.number,
-        },
-        markdown,
-      );
-      core.info(`Sticky PR comment ${outcome}.`);
+      try {
+        const outcome = await upsertStickyComment(
+          octokit.rest.issues,
+          {
+            owner: github.context.repo.owner,
+            repo: github.context.repo.repo,
+            issueNumber: pullRequest.number,
+          },
+          markdown,
+        );
+        core.info(`Sticky PR comment ${outcome}.`);
+      } catch (error) {
+        // A comment failure (fork PR with a read-only token, missing
+        // pull-requests: write permission, etc.) must not fail an otherwise
+        // successful compression run.
+        core.warning(
+          `Could not post the PR comment (compression still succeeded): ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
     }
   }
 

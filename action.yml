@@ -60,7 +60,7 @@ outputs:
   total_saved_bytes:
     description: Total bytes saved across changed files.
   summary_json:
-    description: JSON array with the per-file results (file, before, after, saved, action).
+    description: JSON array with the per-file results (file, original_bytes, result_bytes, saved_bytes, action).
 
 runs:
   using: node20
